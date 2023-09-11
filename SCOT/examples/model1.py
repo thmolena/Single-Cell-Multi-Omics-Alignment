@@ -30,40 +30,18 @@ import torch.nn.functional as F
 
 
 # For computing graph distances:
-from sklearn.neighbors import NearestNeighbors,DistanceMetric, KNeighborsClassifier, kneighbors_graph
-
-
-
+from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier, kneighbors_graph
+from sklearn.metrics import DistanceMetric
 
 def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10):
-
-    # Define the neural network with triplet loss
-    class TripletNet(nn.Module):
-        def __init__(self, num_embeddings, embedding_dim):
-            super(TripletNet, self).__init__()
-            self.embedding = nn.Embedding(num_embeddings, embedding_dim)
-            self.fc1 = nn.Linear(embedding_dim, 16)
-            self.fc2 = nn.Linear(16, 4)
-            
-            #self.fc1 = nn.Linear(embedding_dim, 64)
-            #self.fc2 = nn.Linear(64, 32)
-            #self.fc3 = nn.Linear(32, 16)
-
-        def forward(self, x):
-            embedded = self.embedding(x)
-            x = nn.functional.relu(self.fc1(embedded))
-            x = nn.functional.relu(self.fc2(x))
-            #x = nn.functional.relu(self.fc3(x))
-            return x, embedded        
     
-        
     print("model start")
     time1 = time.time()
     def kmeans_finder(X, best_k = best_k):
         
         # calculate the WSS for different number of clusters
         wss = []
-        for k in range(1, best_k):
+        for k in range(1, 5):
             kmeans = KMeans(n_clusters=k, random_state=42)
             kmeans.fit(X)
             wss.append(kmeans.inertia_)
@@ -71,20 +49,21 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
         # find the elbow point using KneeLocator
         kl = KneeLocator(range(1, 5), wss, curve='convex', direction='decreasing')
         best_k = kl.elbow
-        print(best_k)
+        # print(best_k)
         
     
         
     
         # plot the WSS against the number of clusters with the elbow point
-        plt.plot(range(1, 5), wss)
-        plt.xlabel('Number of clusters')
-        plt.ylabel('Within-cluster sum of squares')
-        plt.title('Elbow method for optimal number of clusters')
-        plt.vlines(best_k, plt.ylim()[0], plt.ylim()[1], linestyles='dashed')
-        plt.show()
 
-        print('Best number of clusters:', best_k)
+        # plt.plot(range(1, 5), wss)
+        # plt.xlabel('Number of clusters')
+        # plt.ylabel('Within-cluster sum of squares')
+        # plt.title('Elbow method for optimal number of clusters')
+        # plt.vlines(best_k, plt.ylim()[0], plt.ylim()[1], linestyles='dashed')
+        # plt.show()
+
+        # print('Best number of clusters:', best_k)
 
         
     
@@ -102,14 +81,14 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
             closest_idx.append(np.argmin(distances))
 
         
-        # create a scatter plot of the data points
-        plt.scatter(X[:, 0], X[:, 1], c=labels, cmap='viridis')
-        # add the cluster centroids as black crosses
-        plt.scatter(centroids[:, 0], centroids[:, 1], marker='x', s=200, linewidths=3, color='black')
-        # add the closest index points as red dots
-        plt.scatter(X[closest_idx, 0], X[closest_idx, 1], marker='o', s=100, color='red')
+        # # create a scatter plot of the data points
+        # plt.scatter(X[:, 0], X[:, 1], c=labels, cmap='viridis')
+        # # add the cluster centroids as black crosses
+        # plt.scatter(centroids[:, 0], centroids[:, 1], marker='x', s=200, linewidths=3, color='black')
+        # # add the closest index points as red dots
+        # plt.scatter(X[closest_idx, 0], X[closest_idx, 1], marker='o', s=100, color='red')
 
-        plt.show()
+        # plt.show()
 
         return best_k, closest_idx
 
@@ -143,6 +122,10 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
 
 
 
+    
+    # define the triplet margin loss function
+    triplet_loss_fn = nn.TripletMarginLoss(margin=1)
+
 
     def min_gromov_wasserstein_distance1(C1_fixed, C2_fixed, C1, C2, p, q, nb_iter_max = 5, lr = lr, epsilon = epsilon, tol= tol):
     
@@ -152,23 +135,6 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
         
         triplets_2 = finding_triplets(C2_fixed.detach().cpu().numpy())
        
-    
-        # Define the hyperparameters
-        num_embeddings1 = C1_fixed.shape[0]
-        num_embeddings2 = C2_fixed.shape[0]
-
-        
-        # Define the hyperparameters
-        embedding_dim = 16
-        margin = 1
-        
-        # Initialize the model and optimizer
-        model1 = TripletNet(num_embeddings1, embedding_dim)
-        model2 = TripletNet(num_embeddings2, embedding_dim)
-
-
-        triplet_loss_fn = nn.TripletMarginLoss(margin=1)
-
         
         for i in range(nb_iter_max):
             
@@ -189,20 +155,11 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
             
             for triplet in triplets_1:
                 
-               
-                anchor1 = torch.tensor([triplet[0]])
-
-                pos1 = torch.tensor([triplet[1]])
-                neg1 = torch.tensor([triplet[2]])
-
-                
+                anchor1 = C1[triplet[0]]
+                pos1 = C1[triplet[1]] 
+                neg1 = C1[triplet[2]]
             
-                anchor_output, _ = model1(anchor1)
-                positive_output, _ = model1(pos1)
-                negative_output, _ = model1(neg1)
-                lossC1 = triplet_loss_fn(anchor_output, positive_output, negative_output)
-                
-                
+                lossC1 = triplet_loss_fn(anchor1, pos1, neg1)
         
                 # add the loss to the total loss for this iteration
                 loss4 += lossC1
@@ -210,18 +167,12 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
     
             for triplet in triplets_2:
                 
-                anchor2 = torch.tensor([triplet[0]])
-
-                pos2 = torch.tensor([triplet[1]])
-                neg2 = torch.tensor([triplet[2]])
-
-                
-            
-                anchor_output, _ = model2(anchor2)
-                positive_output, _ = model2(pos2)
-                negative_output, _ = model2(neg2)
-                lossC2 = triplet_loss_fn(anchor_output, positive_output, negative_output)
-                
+                anchor2 = C2[triplet[0]] 
+                pos2 = C2[triplet[1]] 
+                neg2 = C2[triplet[2]]
+                    
+    
+                lossC2 = triplet_loss_fn(anchor2, pos2, neg2)
         
                 # add the loss to the total loss for this iteration
                 loss5 += lossC2
@@ -230,22 +181,12 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
             loss = (loss1 + loss2+ loss3) + 1/len(triplets_1)*loss4 + 1/len(triplets_2)*loss5
             #print(loss)
             loss_iter.append(loss.clone().detach().cpu().numpy())
-            
+    
         # Compute the gradient of the loss with respect to the cost matrices
-            model1.zero_grad()
-            model2.zero_grad()
                 
             loss.backward()
             with torch.no_grad():
                 
-                for name, param in model1.named_parameters():
-                    if param.requires_grad:
-                        param -= lr * param.grad
-                for name, param in model2.named_parameters():
-                    if param.requires_grad:
-                        param -= lr * param.grad
-
-                            
                 grad_C1 = C1.grad
                 
                 grad_C2 = C2.grad
@@ -256,7 +197,14 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
                 C1 -= lr * grad_C1
                 C2 -= lr * grad_C2
             
-           
+                
+                for m in range(C1.shape[0]):
+                    C1[m][m] = 0
+             
+                for m in range(C2.shape[0]):
+                    C2[m][m] = 0
+
+            
 
                 C1.grad.zero_()
             
@@ -264,26 +212,6 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
             
         
         # Convert the final tensors back to numpy arrays
-        
-        
-        C1 = torch.zeros((num_embeddings1, num_embeddings1))
-        C2 = torch.zeros((num_embeddings2, num_embeddings2))
-        with torch.no_grad():
-            for i in range(num_embeddings1):
-                embedding_i = model1.embedding(torch.tensor([i]))
-                for j in range(num_embeddings1):
-                    embedding_j = model1.embedding(torch.tensor([j]))
-                    distance1 = torch.sum(torch.pow(embedding_i - embedding_j, 2))
-                    C1[i][j] = distance1.item()
-            for i in range(num_embeddings2):
-                embedding_i = model2.embedding(torch.tensor([i]))
-                for j in range(num_embeddings2):
-                    embedding_j = model2.embedding(torch.tensor([j]))
-                    distance2 = torch.sum(torch.pow(embedding_i - embedding_j, 2))
-                    C2[i][j] = distance2.item()
-
-            
-    
         C1 = C1.detach().cpu().numpy()
         C2 = C2.detach().cpu().numpy()
     
