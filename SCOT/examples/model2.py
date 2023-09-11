@@ -68,6 +68,7 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
         
     
         # fit the KMeans model with k clusters
+        
         kmeans = KMeans(n_clusters= best_k, random_state=42).fit(X)
     
         # get the centroids and labels

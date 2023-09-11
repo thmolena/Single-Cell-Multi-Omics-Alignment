@@ -37,22 +37,36 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
     
     print("model start")
     time1 = time.time()
-    def kmeans_finder(X, best_k = best_k):
-        
-        # calculate the WSS for different number of clusters
-        wss = []
-        for k in range(1, 5):
-            kmeans = KMeans(n_clusters=k, random_state=42)
-            kmeans.fit(X)
-            wss.append(kmeans.inertia_)
 
-        # find the elbow point using KneeLocator
-        kl = KneeLocator(range(1, 5), wss, curve='convex', direction='decreasing')
-        best_k = kl.elbow
-        # print(best_k)
+    k_range = range(1, best_k)
+
+    def kmeans_finder(X, k_range = k_range):
+        """
+        Find the best k value for K-Means clustering using the Elbow Method.
+
+        Parameters:
+        - X: Input data for clustering.
+        - k_range: A range of k values to consider.
+
+        Returns:
+        - best_k: The best k value.
+        """
+
+        inertia = []
+
+        for k in k_range:
+            kmeans = KMeans(n_clusters=k)
+            kmeans.fit(X)
+            inertia.append(kmeans.inertia_)
+
+        # Find the "elbow" point in the inertia plot
+        diff = np.diff(inertia)
+        diff_ratio = diff[:-1] / diff[1:]
+        best_k = k_range[np.argmax(diff_ratio) + 1]
+
         
     
-        
+            
     
         # plot the WSS against the number of clusters with the elbow point
 
@@ -66,7 +80,7 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
         # print('Best number of clusters:', best_k)
 
         
-    
+        
         # fit the KMeans model with k clusters
         kmeans = KMeans(n_clusters= best_k, random_state=42).fit(X)
     
@@ -244,3 +258,7 @@ def model(X,y,  epsilon =1e-3, tol= 1e-2, lr = 10, best_k = 5, n_neighbors = 10)
     print("model takes {:f}".format(time2-time1), 'seconds')
 
     return C1, C2, C1_opt, C2_opt
+
+
+def eval_model1_scot(X,y):
+    C1, C2, C1_opt, C2_opt = model(X, y,epsilon =1e-1, tol= 1e-4, lr = 1, n_neighbors = 3)
